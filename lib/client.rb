@@ -6,13 +6,45 @@ module Jawbone
 
     attr_accessor :token
 
-    API_VERSION = "1.0"
-    BASE_URL = "https://jawbone.com/nudge/api/v.1.0"
+    API_VERSION = "1.1"
+    BASE_URL = "https://jawbone.com/nudge/api/v.1.1"
 
     include HTTParty
 
     def initialize(token)
       @token = token
+    end
+
+    def band_events(params={})
+      get_helper("users/@me/bandevents", params)
+    end
+
+    def heart_rates(params={})
+      get_helper("users/@me/heartrates", params)
+    end
+
+    def goals
+      get_helper("users/@me/goals", {})
+    end
+
+    def update_goal(params={})
+      post_helper("users/@me/goals", params)
+    end
+
+    def refresh_token(client_secret)
+      post_helper("users/@me/refreshToken", { secret: client_secret })
+    end
+
+    def settings
+      get_helper("users/@me/settings", {})
+    end
+
+    def time_zone
+      get_helper("users/@me/timezone", {})
+    end
+
+    def trends(params={})
+      get_helper("users/@me/trends", params)
     end
 
     def user
@@ -23,56 +55,65 @@ module Jawbone
       get_helper("users/@me/friends", {})
     end
 
-    def trends(params={})
-      get_helper("users/@me/trends", params)
+    base_strings = ["body_event", "generic_event", "meal", "mood", "move",
+                    "sleep", "workout"]
+
+    base_strings.each do |base|
+      index_method_name = base + "s"
+      plural = base == "mood" ? base : index_method_name
+
+      define_method index_method_name do |*args|
+        get_helper("users/@me/#{plural}", args.first || {})
+      end
+
+      # TODO: skip: generic_event
+      define_method base do |id|
+        get_helper("#{plural}/#{id}", {})
+      end
+
+      # TODO: only: move sleep workout
+      define_method "#{base}_graph" do |id|
+        get_helper("#{plural}/#{id}/image", {})
+      end
+      define_method "#{base}_ticks" do |id|
+        get_helper("#{plural}/#{id}/ticks", {})
+      end
+
+      # TODO: skip: move
+      define_method "create_#{base}" do |params|
+        post_helper("users/@me/#{plural}", params)
+      end
+
+      # TODO: skip: body_event, mood, move, spleep
+      define_method "update_#{base}" do |id, params|
+        post_helper("#{plural}/#{id}/partialUpdate", params)
+      end
+
+      # TODO: skip: move
+      define_method "delete_#{base}" do |id|
+        delete_helper("#{plural}/#{id}")
+      end
     end
 
-    def bandevents(params={})
-      get_helper("users/@me/bandevents", params)
+    def create_webhook(url)
+      post_helper("users/@me/pubsub", { webhook: url })
+    end
+
+    def delete_webhook
+      delete_helper("users/@me/pubsub")
     end
 
     def disconnect
       delete_helper("users/@me/PartnerAppMembership")
     end
 
-    def refresh_token(client_secret)
-      post_helper("users/@me/refreshToken", {secret: client_secret})
-    end
-
-    base_strings = ["move", "body_event", "workout", "sleep", "meal",
-      "cardiac_event", "generic_event"]
-
-    base_strings.each do |base|
-      plural = base + "s"
-
-      define_method plural do |*args|
-        get_helper("users/@me/#{plural}", args.first || {})
-      end
-
-      define_method base do |id|
-        get_helper("#{plural}/#{id}", {})
-      end
-
-      define_method "#{base}_graph" do |id|
-        get_helper("#{plural}/#{id}/image", {})
-      end
-
-      define_method "#{base}_intensity" do |id|
-        get_helper("#{plural}/#{id}/snapshot", {})
-      end
-
-      define_method "create_#{base}" do |params|
-        post_plural = base == "mood" ? base : plural
-        post_helper("users/@me/#{post_plural}", params)
-      end
-    end
-
-    define_method "moods" do |*args|
-      get_helper("users/@me/mood", args.first || {})
-    end
-
-    define_method "mood" do |id|
-      get_helper("mood/#{id}", {})
+    def self.refresh_token(client_id, app_secret, refresh_token)
+      url = 'https://jawbone.com/auth/oauth2/token'
+      response = post(url, { body: { client_id: client_id,
+                                     client_secret: app_secret,
+                                     grant_type: 'refresh_token',
+                                     refresh_token: refresh_token } })
+      response.parsed_response
     end
 
     private
